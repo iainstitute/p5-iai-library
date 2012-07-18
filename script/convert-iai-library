@@ -371,6 +371,12 @@ for my $resource ($db->resultset('Resource')->all) {
     my $lang = lc $resource->languageid1;
     _add_triple($s, $NS->dct('language'), $lang);
 
+    # this is an introductory resource
+    if ($resource->introflag) {
+        _add_triple($s, $NS->sioc('has_container'), $intro);
+        _add_triple($intro, $NS->sioc('container_of'), $s);
+    }
+
     # textual stuff
     if (my $title = _sanitize($resource->title)) {
         _add_triple($s, $NS->dct('title'), [$title, $lang]);
