@@ -1,16 +1,7 @@
-IAI-Library
-
-The README is used to introduce the module and provide instructions on
-how to install the module, any machine dependencies it may have (for
-example C compilers and installed libraries) and any other information
-that should be provided before the module is installed.
-
-A README file is required for CPAN modules since CPAN extracts the README
-file from a module distribution so that people browsing the archive
-can use it to get an idea of the module's uses. It is usually a good idea
-to provide version information here so that people can decide whether
-fixes for the module are worth downloading.
-
+The purpose of IAI::Library is to make the SQL database that underpins
+http://iainstitute.org/library/ amenable to extraction and
+re-representation as an RDF graph. This package is a transitional
+asset and is not intended for production deployment.
 
 INSTALLATION
 
@@ -28,20 +19,7 @@ perldoc command.
 
     perldoc IAI::Library
 
-You can also look for information at:
-
-    RT, CPAN's request tracker (report bugs here)
-        http://rt.cpan.org/NoAuth/Bugs.html?Dist=IAI-Library
-
-    AnnoCPAN, Annotated CPAN documentation
-        http://annocpan.org/dist/IAI-Library
-
-    CPAN Ratings
-        http://cpanratings.perl.org/d/IAI-Library
-
-    Search CPAN
-        http://search.cpan.org/dist/IAI-Library/
-
+    perldoc convert-iai-library
 
 LICENSE AND COPYRIGHT
 
