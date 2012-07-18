@@ -46,6 +46,9 @@ __PACKAGE__->set_primary_key("resourceid", "authorid");
 # Created by DBIx::Class::Schema::Loader v0.07010 @ 2012-02-20 16:40:11
 # DO NOT MODIFY THIS OR ANYTHING ABOVE! md5sum:ASvV+LFEQt+JJupnEuTdug
 
+__PACKAGE__->belongs_to(resource => 'IAI::Library::Schema::Resource',
+                        { 'foreign.ResourceID' => 'self.ResourceID' });
+__PACKAGE__->belongs_to(author => 'IAI::Library::Schema::Author',
+                        { 'foreign.AuthorID' => 'self.AuthorID' });
 
-# You can replace this text with custom code or comments, and it will be preserved on regeneration
 1;

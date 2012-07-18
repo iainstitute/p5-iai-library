@@ -1,0 +1,440 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings FATAL => 'all';
+
+# rdf stuff
+use RDF::Trine;
+#use RDF::Query;
+
+# dealing with muppets
+use OSSP::uuid;
+use URI;
+use HTML::Entities;
+use Encode;
+use Encode::Guess;
+use DateTime;
+use DateTime::Format::W3CDTF;
+use Scalar::Util;
+
+# and finally
+use IAI::Library;
+
+my $NS = RDF::Trine::NamespaceMap->new({
+    rdf   => 'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
+    rdfs  => 'http://www.w3.org/2000/01/rdf-schema#',
+    owl   => 'http://www.w3.org/2002/07/owl#',
+    xsd   => 'http://www.w3.org/2001/XMLSchema#',
+    dct   => 'http://purl.org/dc/terms/',
+    foaf  => 'http://xmlns.com/foaf/0.1/',
+    org   => 'http://www.w3.org/ns/org#',
+    bibo  => 'http://purl.org/ontology/bibo/',
+    pav   => 'http://purl.org/pav/',
+    sioc  => 'http://rdfs.org/sioc/ns#',
+    sioct => 'http://rdfs.org/sioc/types#',
+    skos  => 'http://www.w3.org/2004/02/skos/core#',
+    tool  => 'http://www.daml.org/tools/tools-ont#',
+});
+
+# map so-called topics to static UUIDs
+
+my %TOPICS = (
+    1 => 'urn:uuid:77a9a321-d4be-45e8-a137-6c96d48d713e',
+    2 => 'urn:uuid:8ea7f65a-6142-497d-88a4-36279517c3a6',
+    3 => 'urn:uuid:b8b621be-4bbc-433c-b3ce-4d2911102720',
+    4 => 'urn:uuid:0250027c-c7dc-4a3e-be7b-c46d01070ee5',
+    5 => 'urn:uuid:9dd63ae5-bc54-40f6-8878-da3c2b36b88a',
+    6 => 'urn:uuid:a49e3445-76a7-450f-bf8f-348b2a2b00ee',
+    7 => 'urn:uuid:9b4c3ad0-53f6-44ca-a37b-ac6299835bc9',
+);
+
+%TOPICS = map {
+    $_ => RDF::Trine::Node::Resource->new("$TOPICS{$_}") } keys %TOPICS;
+
+# map resource types to RDF types
+
+my %TYPES = (
+    1  => $NS->bibo('AcademicArticle'),
+    2  => $NS->bibo('Article'),
+    3  => $NS->bibo('Report'),
+    4  => $NS->sioct('Weblog'),
+    5  => $NS->bibo('Periodical'),
+    6  => $NS->bibo('Journal'),
+    7  => $NS->bibo('Book'),
+    8  => $NS->org('FormalOrganization'),
+    9  => $NS->bibo('Conference'),
+    10 => $NS->sioct('MailingList'),
+    11 => $NS->bibo('SlideShow'),
+    12 => $NS->bibo('Website'),
+    13 => $NS->tool('Tool'),
+    14 => $NS->bibo('AudioDocument'),
+);
+
+# this maps numeric IDs to UUIDs
+my %MAP = (
+    author   => {},
+    curator  => {},
+    resource => {},
+    subject  => {},
+    topic    => {},
+    type     => {},
+);
+my %AUTHOR_ALSO;
+
+sub _uuid_urn () {
+    my $uu = OSSP::uuid->new;
+    $uu->make('v4');
+    URI->new('urn:uuid:' . $uu->export('str'))->canonical;
+}
+
+# force to utf8 and get rid of html bs
+sub _sanitize {
+    my $text = shift;
+    return unless defined $text;
+    my $d = eval {
+        Encode::Guess::guess_encoding($text, qw(windows-1252 utf8)) };
+    $text = $d->decode($text) if ref $d;
+    #warn $text;
+    $text = HTML::Entities::decode_entities($text);
+    $text =~ s/^\s*(.*?)\s*$/$1/s;
+    $text;
+}
+
+sub _is_really {
+    my ($obj, $type) = @_;
+    return unless defined $obj and ref $obj;
+    return Scalar::Util::blessed($obj) ? $obj->isa($type) : ref $obj eq $type;
+}
+
+# address book for people
+
+# container for resources
+
+# concept scheme for subjects
+
+# container for topics
+
+# specific containers for types
+
+my $DTF   = DateTime::Format::W3CDTF->new;
+
+# XXX un-hardcode this
+my $DSN   = 'dbi:mysql:database=aifia_library;host=127.0.0.1;port=3306';
+my $db    = IAI::Library->connect($DSN, @ARGV[0,1]);
+my $model = RDF::Trine::Model->temporary_model;
+
+# XXX do something about reading in existing identifiers
+
+sub _add_triple {
+    my ($s, $p, $o) = @_;
+    Carp::croak("missing subject")   unless defined $s;
+    Carp::croak("missing predicate") unless defined $p;
+    Carp::croak("missing object")    unless defined $o;
+
+    # deal with subject
+    if (!ref $s or _is_really($s, 'URI')) {
+        $s = RDF::Trine::Node::Resource->new("$s");
+    }
+
+    # deal with object
+
+    if (_is_really($o, 'RDF::Trine::Node')) {
+        # noop
+    }
+    elsif (_is_really($o, 'URI')) {
+        $o = RDF::Trine::Node::Resource->new("$o");
+    }
+    elsif (_is_really($o, 'ARRAY')) {
+        my @o = @$o;
+        if (@o == 2 and _is_really($o[1], 'RDF::Trine::Node')) {
+            splice @o, 1, 0, undef;
+        }
+        $o = RDF::Trine::Node::Literal->new(@o);
+    }
+    else {
+        $o = RDF::Trine::Node::Literal->new($o);
+    }
+
+    $model->add_statement(RDF::Trine::Statement->new($s, $p, $o));
+}
+
+# library is a sioc:Container
+
+my $library = URI->new('urn:uuid:5e57ae17-3d1b-4661-9298-a55669b824af');
+_add_triple($library, $NS->rdf('type'), $NS->sioc('Container'));
+_add_triple($library, $NS->dct('title'),
+            ['Information Architecture Institute Library', 'en']);
+
+# do subjects
+
+# generate concept scheme
+
+my $scheme = URI->new('urn:uuid:bf6f235d-e998-4721-8027-6e57028d1630');
+_add_triple($scheme, $NS->rdf('type'), $NS->skos('ConceptScheme'));
+_add_triple($scheme, $NS->skos('prefLabel'), ['IAI Library Concepts', 'en']);
+_add_triple($library, $NS->sioc('container_of'), $scheme);
+_add_triple($scheme, $NS->sioc('has_container'), $library);
+
+for my $subject ($db->resultset('Subject')->all) {
+
+    my $uuid = _uuid_urn;
+
+    my $s = RDF::Trine::Node::Resource->new("$uuid");
+
+    my %x = (
+        identifier  => $subject->subjectid,
+        prefLabel   => $subject->subjectname,
+        altLabel    => $subject->alternatename || '',
+        description => $subject->subjectdescription || '',
+    );
+
+    $MAP{subject}{$x{identifier}} = $s;
+
+    _add_triple($s, $NS->rdf('type'), $NS->skos('Concept'));
+    _add_triple($s, $NS->skos('inScheme'), $scheme);
+
+    if ($subject->subjectlevel <= 1) {
+        _add_triple($scheme, $NS->skos('hasTopConcept'), $s);
+        _add_triple($s, $NS->skos('topConceptOf'), $scheme);
+    }
+
+    _add_triple($s, $NS->dct('identifier'),
+                [$x{identifier}, $NS->xsd('integer')]);
+    _add_triple($s, $NS->skos('prefLabel'), $x{prefLabel});
+
+    if ($x{description}) {
+        _add_triple($s, $NS->dct('description'), $x{description});
+    }
+    if ($x{altLabel}) {
+        _add_triple($s, $NS->skos('altLabel'), $x{altLabel});
+    }
+}
+
+for my $mapping ($db->resultset('Subject::Term')->all) {
+    my $narrow = $MAP{subject}{$mapping->narrowerid}; # the narrower term
+    my $broad  = $MAP{subject}{$mapping->broaderid};  # the broader term
+
+    if ($narrow and $broad) {
+        _add_triple($narrow, $NS->skos('broader'), $broad);
+        _add_triple($broad, $NS->skos('narrower'), $narrow);
+    }
+}
+
+# do people
+
+my $authors = URI->new('urn:uuid:93c88c95-20c0-49e6-84d4-7bab871de00f');
+_add_triple($authors, $NS->rdf('type'), $NS->sioct('AddressBook'));
+_add_triple($authors, $NS->skos('prefLabel'), ['Authors', 'en']);
+
+for my $author ($db->resultset('Author')->all) {
+    my $uuid = _uuid_urn;
+    my $s = RDF::Trine::Node::Resource->new("$uuid");
+
+    $MAP{author}{$author->authorid} = $s;
+
+    _add_triple($s, $NS->rdf('type'), $NS->foaf('Person'));
+
+    _add_triple($authors, $NS->sioc('container_of'), $s);
+    _add_triple($s, $NS->sioc('has_container'), $authors);
+
+    # add identifier
+    _add_triple($s, $NS->dct('identifier'),
+                [$author->authorid, $NS->xsd('integer')]);
+
+    my ($first, $last) = map { _sanitize($_) }
+        ($author->authorfirstname, $author->authorlastname);
+    _add_triple($s, $NS->foaf('givenName'), $first) if $first;
+    _add_triple($s, $NS->foaf('familyName'), $last) if $last;
+
+    # combined name
+    if ($first or $last) {
+        $first ||= '';
+        $last  ||= '';
+        my $name = "$first $last";
+        $name =~ s/^\s*(.*?)\s*$/$1/;
+
+        $AUTHOR_ALSO{$name} = $s;
+
+        _add_triple($s, $NS->foaf('name'), $name);
+    }
+}
+
+my $curators = URI->new('urn:uuid:f800b3ca-6b4e-4998-a9a9-130f8010811f');
+_add_triple($curators, $NS->rdf('type'), $NS->sioct('AddressBook'));
+_add_triple($curators, $NS->skos('prefLabel'), ['Curators', 'en']);
+
+# better to call these curators
+for my $curator ($db->resultset('Contributor')->all) {
+
+    # name
+    my ($first, $last) = map { _sanitize($_) }
+        ($curator->contributorfirstname, $curator->contributorlastname);
+
+    # XXX DO NOT USE THIS UNTIL THE NAME HAS BEEN CHECKED
+    my $uuid = _uuid_urn;
+    my $s    = RDF::Trine::Node::Resource->new("$uuid");
+
+    # combined name
+    if ($first or $last) {
+        $first ||= '';
+        $last  ||= '';
+        my $name = "$first $last";
+        $name =~ s/^\s*(.*?)\s*$/$1/;
+
+        # XXX CHANGING UUID
+        $s = $AUTHOR_ALSO{$name} if $AUTHOR_ALSO{$name};
+
+        _add_triple($s, $NS->foaf('name'), $name);
+    }
+
+    $MAP{curator}{$curator->contributorid} = $s;
+
+    _add_triple($s, $NS->foaf('givenName'), $first) if $first;
+    _add_triple($s, $NS->foaf('familyName'), $last) if $last;
+
+    _add_triple($s, $NS->rdf('type'), $NS->foaf('Person'));
+
+    _add_triple($curators, $NS->sioc('container_of'), $s);
+    _add_triple($s, $NS->sioc('has_container'), $curators);
+
+    # add identifier
+    _add_triple($s, $NS->dct('identifier'),
+                [$curator->contributorid, $NS->xsd('integer')]);
+
+
+    if (my $email = $curator->contributoremailaddress) {
+        $email =~ s/^\s*(.*?)\s*$/mailto:\L$1/;
+        $email = URI->new($email);
+        _add_triple($s, $NS->foaf('mbox'), $email);
+    }
+}
+
+
+# deal with introductory resources
+my $intro = URI->new('urn:uuid:b8de6b1e-b03d-47f2-9b04-e4423ccd6e63');
+_add_triple($intro, $NS->rdf('type'), $NS->sioc('Container'));
+_add_triple($intro, $NS->dct('title'), ['Introductory Resources', 'en']);
+_add_triple($library, $NS->sioc('parent_of'), $intro);
+_add_triple($intro, $NS->sioc('has_parent'), $library);
+
+# do topics
+
+for my $topic ($db->resultset('Topic')->all) {
+    my $uuid = _uuid_urn;
+    my $s = RDF::Trine::Node::Resource->new("$uuid");
+    $MAP{topic}{$topic->topicid} = $s;
+    _add_triple($s, $NS->rdf('type'), $NS->sioc('Container'));
+    _add_triple($s, $NS->rdfs('label'), $topic->topicname);
+
+    # bind
+    _add_triple($s, $NS->sioc('has_parent'), $library);
+    _add_triple($library, $NS->sioc('parent_of'), $s);
+}
+
+# do types
+
+for my $type ($db->resultset('Type')->all) {
+    my $uuid = _uuid_urn;
+    my $s = RDF::Trine::Node::Resource->new("$uuid");
+    $MAP{type}{$type->typeid} = $s;
+
+    _add_triple($s, $NS->rdf('type'), $NS->sioc('Container'));
+    _add_triple($s, $NS->rdfs('label'), $type->typename);
+
+    # bind
+    my $parent = $MAP{topic}{$type->topicid} or die $!;
+    _add_triple($s, $NS->sioc('has_parent'), $parent);
+    _add_triple($parent, $NS->sioc('parent_of'), $s);
+}
+
+# now do resources
+
+# one pass to do all non-self-referential stuff
+for my $resource ($db->resultset('Resource')->all) {
+    my $uuid = _uuid_urn;
+    my $s = RDF::Trine::Node::Resource->new("$uuid");
+    $MAP{resource}{$resource->resourceid} = $s;
+
+    my $type = $TYPES{$resource->typeid} || $NS->foaf('Document');
+    _add_triple($s, $NS->rdf('type'), $type);
+
+    my $created  = $resource->datecreated;
+    my $modified = $resource->datemodified;
+    map { $_->set_time_zone('UTC'); $_->set_formatter($DTF) }
+        ($created, $modified);
+
+    _add_triple($s, $NS->dct('created'),  ["$created",  $NS->xsd('dateTime')]);
+    _add_triple($s, $NS->dct('modified'), ["$modified", $NS->xsd('dateTime')])
+        if $modified > $created;
+
+    # language
+    my $lang = lc $resource->languageid1;
+    _add_triple($s, $NS->dct('language'), $lang);
+
+    # textual stuff
+    if (my $title = _sanitize($resource->title)) {
+        _add_triple($s, $NS->dct('title'), [$title, $lang]);
+    }
+    if (my $abstract = _sanitize($resource->abstract)) {
+        _add_triple($s, $NS->dct('abstract'), [$abstract, $lang]);
+    }
+    if (my $note = _sanitize($resource->notes)) {
+        _add_triple($s, $NS->skos('note'), [$note, $lang]);
+    }
+
+    # URIs (also why no scheme?)
+    my ($sameas, $seealso) = map { $_ =~ m!^\s*(?://)?(.*?)\s*$! and $1 and
+                                       URI->new("http://$1")->canonical }
+        ($resource->url1, $resource->url2);
+    if ($sameas) {
+        _add_triple($s, $NS->owl('sameAs'), $sameas);
+    }
+    if ($seealso) {
+        _add_triple($s, $NS->rdfs('seeAlso'), $seealso);
+    }
+
+    # arrange in hierarchical container
+    if (my $container = $MAP{type}{$resource->typeid}) {
+        _add_triple($s, $NS->sioc('has_container'), $container);
+        _add_triple($container, $NS->sioc('container_of'), $s);
+    }
+
+    # person that added it
+    if (my $curator = $MAP{curator}{$resource->contributorid}) {
+        _add_triple($s, $NS->pav('curatedBy'), $curator);
+        _add_triple($curator, $NS->pav('curates'), $s);
+    }
+
+    # subjects
+    for my $subject ($resource->subjects) {
+        if ($subject = $MAP{subject}{$subject->subjectid}) {
+            _add_triple($s, $NS->dct('subject'), $subject);
+        }
+    }
+
+}
+
+# a second pass to deal with authorship and translation
+
+for my $resource ($db->resultset('Resource')->all) {
+    my $s = $MAP{resource}{$resource->resourceid};
+
+    my $predicate;
+    for my $translation ($resource->translation_of) {
+        my $referent = $MAP{resource}{$translation->resourceid};
+        _add_triple($s, $NS->bibo('translationOf'), $referent);
+        $predicate ||= $NS->bibo('translator');
+    }
+    $predicate ||= $NS->dct('creator');
+
+    # multiple relations
+    for my $author ($resource->authors) {
+        if ($author = $MAP{author}{$author->authorid}) {
+            _add_triple($s, $predicate, $author);
+        }
+    }
+
+}
+
+my $serializer = RDF::Trine::Serializer->new('rdfxml', namespaces => $NS);
+print $serializer->serialize_model_to_string($model);

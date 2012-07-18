@@ -55,6 +55,11 @@ __PACKAGE__->set_primary_key("resourceid", "translationid", "languageid");
 # Created by DBIx::Class::Schema::Loader v0.07010 @ 2012-02-20 16:40:11
 # DO NOT MODIFY THIS OR ANYTHING ABOVE! md5sum:srWYyiaemBsXpk9w9MOrlw
 
+__PACKAGE__->belongs_to(resource => 'IAI::Library::Schema::Resource',
+                        { 'foreign.ResourceID' => 'self.ResourceID' });
+__PACKAGE__->belongs_to(translation => 'IAI::Library::Schema::Resource',
+                        { 'foreign.ResourceID' => 'self.TranslationID' });
+__PACKAGE__->belongs_to(language => 'IAI::Library::Schema::Language',
+                        { 'foreign.LanguageID' => 'self.LanguageID' });
 
-# You can replace this text with custom code or comments, and it will be preserved on regeneration
 1;

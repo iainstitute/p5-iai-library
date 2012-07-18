@@ -46,6 +46,10 @@ __PACKAGE__->set_primary_key("resourceid", "subjectid");
 # Created by DBIx::Class::Schema::Loader v0.07010 @ 2012-02-20 16:40:11
 # DO NOT MODIFY THIS OR ANYTHING ABOVE! md5sum:ub5+str+BDPJCQWY/f4+bA
 
+__PACKAGE__->belongs_to(resource => 'IAI::Library::Schema::Resource',
+                        { 'foreign.ResourceID' => 'self.ResourceID' });
 
-# You can replace this text with custom code or comments, and it will be preserved on regeneration
+__PACKAGE__->belongs_to(subject => 'IAI::Library::Schema::Subject',
+                        { 'foreign.SubjectID' => 'self.SubjectID' });
+
 1;

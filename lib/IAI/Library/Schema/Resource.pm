@@ -218,6 +218,28 @@ __PACKAGE__->set_primary_key("resourceid");
 # Created by DBIx::Class::Schema::Loader v0.07010 @ 2012-02-20 16:40:11
 # DO NOT MODIFY THIS OR ANYTHING ABOVE! md5sum:btntiXVXaDfftQXotEpWjQ
 
+__PACKAGE__->has_many(
+    subjects => 'IAI::Library::Schema::Resource::Subject',
+    { 'foreign.resourceid' => 'self.resourceid' });
 
-# You can replace this text with custom code or comments, and it will be preserved on regeneration
+__PACKAGE__->has_many(authors => 'IAI::Library::Schema::Resource::Author',
+                      { 'foreign.resourceid' => 'self.resourceid' });
+
+__PACKAGE__->has_many(
+    translations => 'IAI::Library::Schema::Resource::Translation',
+    { 'foreign.resourceid' => 'self.resourceid' });
+
+__PACKAGE__->has_many(
+    translation_of => 'IAI::Library::Schema::Resource::Translation',
+    { 'foreign.translationid' => 'self.resourceid' });
+
+__PACKAGE__->belongs_to(type => 'IAI::Library::Schema::Type',
+                        { 'foreign.typeid' => 'self.typeid' });
+
+__PACKAGE__->belongs_to(language => 'IAI::Library::Schema::Language',
+                        { 'foreign.languageid' => 'self.languageid1' });
+
+__PACKAGE__->belongs_to(contributor => 'IAI::Library::Schema::Contributor',
+                        { 'foreign.contributorid' => 'self.contributorid' });
+
 1;
